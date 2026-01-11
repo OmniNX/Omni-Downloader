@@ -8,3 +8,6 @@
 .Spotlight-V100
 .TemporaryItems
 .Trashes
+
+# Makefile outputs
+Omni Downloader.zip
