@@ -23,7 +23,6 @@ jobs:
           python-version: '3.x'
       
       - name: Generate release files
-        working-directory: Omni Downloader
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 generate_release_files.py
@@ -42,6 +41,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add "Omni Downloader/include/*/RELEASE_*.ini"
+          git add "include/*/RELEASE_*.ini"
           git commit -m "chore: update release files [skip ci]"
           git push
