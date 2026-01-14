@@ -10,4 +10,5 @@
 .Trashes
 
 # Makefile outputs
+output/
 Omni Downloader.zip
