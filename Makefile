@@ -1,22 +1,23 @@
 .PHONY: zip clean
 
-zip: "Omni Downloader.zip"
+zip: "./output/Omni Downloader.zip"
 
-"Omni Downloader.zip":
+"./output/Omni Downloader.zip":
 	@echo "Creating Omni Downloader.zip..."
-	@rm -rf "Omni Downloader"
-	@mkdir -p "Omni Downloader"
-	@cp package.ini "Omni Downloader/"
-	@rsync -av --exclude='RELEASE*.ini' --exclude='*.pyc' --exclude='__pycache__' --exclude='.DS_Store' include/ "Omni Downloader/include/"
-	@zip -r "Omni Downloader.zip" "Omni Downloader" \
+	@mkdir -p output
+	@rm -rf "output/Omni Downloader"
+	@mkdir -p "output/Omni Downloader"
+	@cp package.ini "output/Omni Downloader/"
+	@rsync -av --exclude='RELEASE*.ini' --exclude='*.pyc' --exclude='__pycache__' --exclude='.DS_Store' include/ "output/Omni Downloader/include/"
+	@cd output && zip -r "Omni Downloader.zip" "Omni Downloader" \
 		-x "*.pyc" \
 		-x "__pycache__/*" \
 		-x ".DS_Store" \
 		-x "*/.DS_Store"
-	@rm -rf "Omni Downloader"
-	@echo "✓ Created Omni Downloader.zip"
+	@rm -rf "output/Omni Downloader"
+	@echo "✓ Created output/Omni Downloader.zip"
 
 clean:
-	@rm -f "Omni Downloader.zip"
-	@rm -rf "Omni Downloader"
-	@echo "✓ Cleaned up Omni Downloader.zip"
+	@rm -f "output/Omni Downloader.zip"
+	@rm -rf "output/Omni Downloader"
+	@echo "✓ Cleaned up output/Omni Downloader.zip"
