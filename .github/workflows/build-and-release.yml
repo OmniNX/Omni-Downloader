@@ -94,13 +94,7 @@ jobs:
         run: |
           if [ "${{ inputs.hotfix }}" = "true" ]; then
             echo "release_name=Release ${{ steps.get_latest_release.outputs.tag_name }} (Hotfix Update)" >> $GITHUB_OUTPUT
-            RELEASE_BODY="**HOTFIX UPDATE** - Updated existing release
-
-**Version:** ${{ steps.get_latest_release.outputs.tag_name }}
-**Commit:** ${{ github.sha }}
-**Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-
-**Note:** This is a hotfix update to the existing release ${{ steps.get_latest_release.outputs.tag_name }}"
+            RELEASE_BODY="**HOTFIX UPDATE** - Updated existing release"
             echo "release_body<<EOF" >> $GITHUB_OUTPUT
             echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
@@ -108,11 +102,7 @@ jobs:
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
           else
             echo "release_name=Release ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
-            RELEASE_BODY="Automated build of OmniNX Downloader
-
-**Version:** ${{ steps.get_version.outputs.version }}
-**Commit:** ${{ github.sha }}
-**Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            RELEASE_BODY="Automated build of OmniNX Downloader"
             echo "release_body<<EOF" >> $GITHUB_OUTPUT
             echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
