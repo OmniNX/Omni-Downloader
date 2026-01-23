@@ -1,0 +1,56 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Required to create releases
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Make
+        run: |
+          # Make is pre-installed on Ubuntu, but ensure zip is available
+          sudo apt-get update
+          sudo apt-get install -y zip rsync
+      
+      - name: Build zip package
+        run: make zip
+      
+      - name: Get version from tag or use default
+        id: get_version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+            IS_PRERELEASE="false"
+          else
+            VERSION="dev-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA::8}"
+            IS_PRERELEASE="true"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
+          echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag_name }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            Automated build of OmniNX Downloader
+            
+            **Version:** ${{ steps.get_version.outputs.version }}
+            **Commit:** ${{ github.sha }}
+            **Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          draft: false
+          prerelease: ${{ steps.get_version.outputs.prerelease == 'true' }}
+          files: ./output/OmniNX Downloader.zip
