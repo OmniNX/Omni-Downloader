@@ -83,6 +83,8 @@ jobs:
           if [ -n "$ASSET_ID" ]; then
             echo "Deleting existing asset (ID: $ASSET_ID)"
             gh api repos/${{ github.repository }}/releases/assets/$ASSET_ID -X DELETE
+            echo "Waiting for asset deletion to complete..."
+            sleep 2
           else
             echo "No existing asset found"
           fi
@@ -110,7 +112,8 @@ jobs:
             echo "is_prerelease=${{ steps.get_version.outputs.prerelease }}" >> $GITHUB_OUTPUT
           fi
       
-      - name: Create or Update Release
+      - name: Create or Update Release (Normal Mode)
+        if: steps.get_version.outputs.hotfix != 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.release_info.outputs.release_tag }}
@@ -119,3 +122,18 @@ jobs:
           draft: false
           prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
           files: ./output/OmniNX Downloader.zip
+      
+      - name: Update Release (Hotfix Mode)
+        if: steps.get_version.outputs.hotfix == 'true'
+        run: |
+          # Update release body
+          gh release edit ${{ steps.get_latest_release.outputs.tag_name }} \
+            --title "${{ steps.release_info.outputs.release_name }}" \
+            --notes "${{ steps.release_info.outputs.release_body }}"
+          
+          # Upload new asset
+          gh release upload ${{ steps.get_latest_release.outputs.tag_name }} \
+            "./output/OmniNX Downloader.zip" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
