@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate RELEASE_X.ini files by fetching latest GitHub release tags
-for sysmodules, overlays, and apps.
+for sysmodules, overlays, apps, and emulatoren.
 """
 
 import re
@@ -102,10 +102,17 @@ def generate_release_ini(category: str, entries: List[Dict[str, str]], output_pa
         section_name = 'Versions'
     elif category == 'apps':
         section_name = 'Versions'
+    elif category == 'emulatoren':
+        section_name = 'Versions'
     else:
         section_name = 'Release Info'
     
     config.add_section(section_name)
+    
+    # Monitoring statistics
+    success_count = 0
+    failure_count = 0
+    failed_entries = []
     
     # Fetch tags for each entry
     for i, entry in enumerate(entries):
@@ -131,15 +138,32 @@ def generate_release_ini(category: str, entries: List[Dict[str, str]], output_pa
                 else:
                     clean_tag = clean_tag[:30]
             config.set(section_name, entry['name'], clean_tag)
+            success_count += 1
             print(f"✓ {clean_tag}")
         else:
+            failure_count += 1
+            failed_entries.append(f"{entry['name']} ({entry['owner']}/{entry['repo']})")
             print("✗ Failed")
     
     # Write to file
     with open(output_path, 'w', encoding='utf-8') as f:
         config.write(f, space_around_delimiters=False)
     
+    # Print monitoring summary
     print(f"\n✓ Created {output_path}")
+    print(f"  Success: {success_count}/{len(entries)}")
+    if failure_count > 0:
+        print(f"  Failed: {failure_count}/{len(entries)}")
+        for failed in failed_entries:
+            print(f"    - {failed}")
+    
+    return {
+        'category': category,
+        'total': len(entries),
+        'success': success_count,
+        'failed': failure_count,
+        'failed_entries': failed_entries
+    }
 
 def main():
     """Main function."""
@@ -153,13 +177,17 @@ def main():
         print("⚠ No GitHub token found. Set GITHUB_TOKEN env var for higher rate limits.")
     print("=" * 50)
     
+    # Track all results for final summary
+    all_results = []
+    
     # Process sysmodules
     sysmodules_path = include_path / "sysmodules" / "sysmodules.ini"
     if sysmodules_path.exists():
         entries = parse_ini_file(sysmodules_path)
         if entries:
             output_path = include_path / "sysmodules" / "RELEASE_SM.ini"
-            generate_release_ini('sysmodules', entries, output_path)
+            result = generate_release_ini('sysmodules', entries, output_path)
+            all_results.append(result)
     
     # Process overlays
     overlays_path = include_path / "overlays" / "overlays.ini"
@@ -167,7 +195,8 @@ def main():
         entries = parse_ini_file(overlays_path)
         if entries:
             output_path = include_path / "overlays" / "RELEASE_OV.ini"
-            generate_release_ini('overlays', entries, output_path)
+            result = generate_release_ini('overlays', entries, output_path)
+            all_results.append(result)
     
     # Process apps
     apps_path = include_path / "apps" / "apps.ini"
@@ -175,7 +204,38 @@ def main():
         entries = parse_ini_file(apps_path)
         if entries:
             output_path = include_path / "apps" / "RELEASE_APPS.ini"
-            generate_release_ini('apps', entries, output_path)
+            result = generate_release_ini('apps', entries, output_path)
+            all_results.append(result)
+    
+    # Process emulatoren
+    emulatoren_path = include_path / "emulatoren" / "emulatoren.ini"
+    if emulatoren_path.exists():
+        entries = parse_ini_file(emulatoren_path)
+        if entries:
+            output_path = include_path / "emulatoren" / "RELEASE_EM.ini"
+            result = generate_release_ini('emulatoren', entries, output_path)
+            all_results.append(result)
+    
+    # Print final monitoring summary
+    print("\n" + "=" * 50)
+    print("FINAL SUMMARY")
+    print("=" * 50)
+    total_entries = sum(r['total'] for r in all_results)
+    total_success = sum(r['success'] for r in all_results)
+    total_failed = sum(r['failed'] for r in all_results)
+    
+    print(f"Total entries processed: {total_entries}")
+    print(f"Successfully fetched: {total_success} ({total_success/total_entries*100:.1f}%)" if total_entries > 0 else "Successfully fetched: 0")
+    print(f"Failed: {total_failed} ({total_failed/total_entries*100:.1f}%)" if total_entries > 0 else "Failed: 0")
+    
+    # List all failed entries by category
+    if total_failed > 0:
+        print("\nFailed entries by category:")
+        for result in all_results:
+            if result['failed'] > 0:
+                print(f"  {result['category']}:")
+                for failed in result['failed_entries']:
+                    print(f"    - {failed}")
     
     print("\n" + "=" * 50)
     print("Done!")
