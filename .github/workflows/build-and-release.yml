@@ -5,6 +5,12 @@ on:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+*'  # Trigger on version tags like 1.0.0
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      hotfix:
+        description: 'Hotfix mode - update latest release instead of creating new one'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-and-release:
@@ -23,34 +29,103 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zip rsync
       
+      - name: Verify GitHub CLI
+        if: steps.get_version.outputs.hotfix == 'true'
+        run: |
+          gh --version || echo "GitHub CLI not available"
+      
       - name: Build zip package
         run: make zip
       
       - name: Get version from tag or use default
         id: get_version
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
+          if [ "${{ inputs.hotfix }}" = "true" ]; then
+            echo "mode=hotfix" >> $GITHUB_OUTPUT
+            echo "hotfix=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${{ github.ref_name }}"
             IS_PRERELEASE="false"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
+            echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+            echo "hotfix=false" >> $GITHUB_OUTPUT
           else
             VERSION="dev-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA::8}"
             IS_PRERELEASE="true"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
+            echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+            echo "hotfix=false" >> $GITHUB_OUTPUT
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag_name=$VERSION" >> $GITHUB_OUTPUT
-          echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
       
-      - name: Create Release
+      - name: Get latest release for hotfix
+        if: steps.get_version.outputs.hotfix == 'true'
+        id: get_latest_release
+        run: |
+          # Get the latest release (non-draft, non-prerelease)
+          LATEST_RELEASE=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
+          if [ -z "$LATEST_RELEASE" ]; then
+            echo "Error: No latest release found. Cannot perform hotfix."
+            exit 1
+          fi
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/latest --jq '.id')
+          echo "tag_name=$LATEST_RELEASE" >> $GITHUB_OUTPUT
+          echo "release_id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "Latest release: $LATEST_RELEASE (ID: $RELEASE_ID)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Delete existing asset if hotfix
+        if: steps.get_version.outputs.hotfix == 'true'
+        run: |
+          ASSET_ID=$(gh api repos/${{ github.repository }}/releases/${{ steps.get_latest_release.outputs.release_id }}/assets --jq '.[] | select(.name == "OmniNX Downloader.zip") | .id' || echo "")
+          if [ -n "$ASSET_ID" ]; then
+            echo "Deleting existing asset (ID: $ASSET_ID)"
+            gh api repos/${{ github.repository }}/releases/assets/$ASSET_ID -X DELETE
+          else
+            echo "No existing asset found"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Prepare release info
+        id: release_info
+        run: |
+          if [ "${{ inputs.hotfix }}" = "true" ]; then
+            echo "release_name=Release ${{ steps.get_latest_release.outputs.tag_name }} (Hotfix Update)" >> $GITHUB_OUTPUT
+            RELEASE_BODY="**HOTFIX UPDATE** - Updated existing release
+
+**Version:** ${{ steps.get_latest_release.outputs.tag_name }}
+**Commit:** ${{ github.sha }}
+**Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+**Note:** This is a hotfix update to the existing release ${{ steps.get_latest_release.outputs.tag_name }}"
+            echo "release_body<<EOF" >> $GITHUB_OUTPUT
+            echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "release_tag=${{ steps.get_latest_release.outputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "release_name=Release ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+            RELEASE_BODY="Automated build of OmniNX Downloader
+
+**Version:** ${{ steps.get_version.outputs.version }}
+**Commit:** ${{ github.sha }}
+**Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "release_body<<EOF" >> $GITHUB_OUTPUT
+            echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "release_tag=${{ steps.get_version.outputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=${{ steps.get_version.outputs.prerelease }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create or Update Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.get_version.outputs.tag_name }}
-          name: Release ${{ steps.get_version.outputs.version }}
-          body: |
-            Automated build of OmniNX Downloader
-            
-            **Version:** ${{ steps.get_version.outputs.version }}
-            **Commit:** ${{ github.sha }}
-            **Build Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          tag_name: ${{ steps.release_info.outputs.release_tag }}
+          name: ${{ steps.release_info.outputs.release_name }}
+          body: ${{ steps.release_info.outputs.release_body }}
           draft: false
-          prerelease: ${{ steps.get_version.outputs.prerelease == 'true' }}
+          prerelease: ${{ steps.release_info.outputs.is_prerelease == 'true' }}
           files: ./output/OmniNX Downloader.zip
